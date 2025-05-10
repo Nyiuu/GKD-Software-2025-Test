@@ -15,13 +15,13 @@ private:
     mutex g_mutex;
     bool g_drawing;
     Point g_last_point;
-    Model model;
+    Model<float> model;
 
     
 public:
     UI():g_canvas(400, 400, CV_8UC1, Scalar(255)), g_display(450, 650, CV_8UC3, Scalar(255, 255, 255)), 
     g_probs(10, 0.0f), g_drawing(false){
-
+        
     }
 
     ~UI(){
@@ -47,9 +47,17 @@ public:
             if(countNonZero(canvas_copy < 255) > 0){
                     string temp_path = "../temp/temp_digit.png";
                     imwrite(temp_path, canvas_copy);
-                    
+
                     auto result = model.forward(temp_path);
                     
+                    //test
+                    // auto start = std::chrono::high_resolution_clock::now();
+                    // auto result = model.forward(temp_path);
+                    // auto end = std::chrono::high_resolution_clock::now();
+                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+                    // std::cout << "耗时: " << duration.count() / 1000000.0 << " 秒" << std::endl;
+                    //test
+
                     if(!result.empty()){
                         lock_guard<mutex> lock(g_mutex);
                         for(int i = 0; i < 10; ++i){
@@ -136,7 +144,7 @@ public:
         Mat button(50, 100, CV_8UC3, Scalar(200, 200, 200));
         putText(button, "Clear", Point(10, 30), 
                     FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 0, 0), 2);
-
+        
          // 主循环
         while (true) {
             // 创建显示图像

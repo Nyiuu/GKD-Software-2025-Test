@@ -8,24 +8,25 @@
 using namespace std;
 using json = nlohmann::json;
 
+template<typename T>
 class Model
 {
 private:
-    vector<vector<float>> weight1;
-    vector<vector<float>> bias1;
-    vector<vector<float>> weight2;
-    vector<vector<float>> bias2;
+    vector<vector<T>> weight1;
+    vector<vector<T>> bias1;
+    vector<vector<T>> weight2;
+    vector<vector<T>> bias2;
 
-    vector<vector<float>> matrix_multiply(const vector<vector<float>>& matrix1, const vector<vector<float>>& matrix2){
+    vector<vector<T>> matrix_multiply(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2){
         int row = matrix1.size();
         int col = matrix2[0].size();
         int w = matrix2.size();
 
-        vector<vector<float>> result(row, vector<float>(col));
+        vector<vector<T>> result(row, vector<T>(col));
 
         for(int i = 0; i < row; i++){
             for(int j = 0; j < col; j++){
-                float sum = 0;
+                T sum = 0;
                 for(int k = 0; k < w; k++){
                     sum += matrix1[i][k] * matrix2[k][j];
                 }
@@ -36,8 +37,8 @@ private:
         return result;
     }
 
-    vector<vector<float>> matrix_add(const vector<vector<float>>& matrix1, const vector<vector<float>>& matrix2){
-        vector<vector<float>> result(matrix1.size(), vector<float>(matrix1[0].size()));
+    vector<vector<T>> matrix_add(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2){
+        vector<vector<T>> result(matrix1.size(), vector<T>(matrix1[0].size()));
         
         for(size_t i = 0; i < matrix1.size(); i++){
             for(size_t j = 0; j < matrix1[0].size(); j++){
@@ -48,8 +49,8 @@ private:
         return result;
     }
 
-    vector<vector<float>> relu(const vector<vector<float>>& input){
-        vector<vector<float>> output(input.size(), vector<float>(input[0].size()));
+    vector<vector<T>> relu(const vector<vector<T>>& input){
+        vector<vector<T>> output(input.size(), vector<T>(input[0].size()));
        
         for(size_t i = 0; i < input.size(); i++){
             for(size_t j = 0; j < input[0].size(); j++){
@@ -60,10 +61,11 @@ private:
         return output;
     }
 
-    vector<float> softMax(const vector<vector<float>>& input){
+    
+    vector<T> softMax(const vector<vector<T>>& input){
         int s = input[0].size();
-        vector<float> output(s);
-        float mother = 0;
+        vector<T> output(s);
+        T mother = 0;
         for(int j = 0; j < s; j++){
             mother += exp(input[0][j]);
         }
@@ -74,23 +76,23 @@ private:
         return output;
     }
 
-    vector<vector<float>> init_matrix(const vector<int>& dims){
-        return vector<vector<float>>(
+    vector<vector<T>> init_matrix(const vector<T>& dims){
+        return vector<vector<T>>(
             dims[0], 
-            vector<float>(dims[1], 0.0f)
+            vector<T>(dims[1], 0.0f)
         );
     }
 
     void load_model(){
         ifstream file("../mnist-fc/meta.json");
         json data = json::parse(file);
-        weight1 = init_matrix(data["fc1.weight"].get<vector<int>>());
-        bias1 = init_matrix(data["fc1.bias"].get<vector<int>>());
-        weight2 = init_matrix(data["fc2.weight"].get<vector<int>>());
-        bias2 = init_matrix(data["fc2.bias"].get<vector<int>>());
+        weight1 = init_matrix(data["fc1.weight"].get<vector<T>>());
+        bias1 = init_matrix(data["fc1.bias"].get<vector<T>>());
+        weight2 = init_matrix(data["fc2.weight"].get<vector<T>>());
+        bias2 = init_matrix(data["fc2.bias"].get<vector<T>>());
     }
 
-    void load_data(const string& bin_name, vector<vector<float>>& matrix){
+    void load_data(const string& bin_name, vector<vector<T>>& matrix){
         int row = matrix.size();
         int col = matrix[0].size();
 
@@ -104,9 +106,9 @@ private:
         auto file_size = f.tellg();
         f.seekg(0, ios::beg);
 
-        auto count = file_size / sizeof(float);
+        auto count = file_size / sizeof(T);
 
-        vector<float> buffer(count);
+        vector<T> buffer(count);
         f.read(reinterpret_cast<char*>(buffer.data()), file_size);
 
         for (int i = 0; i < row; ++i) {
@@ -116,21 +118,25 @@ private:
         }
     }
 
-public:
-    
-    Model(){
-        load_model();
+    void load_weight(){
         load_data("../mnist-fc/fc1.weight", weight1);
         load_data("../mnist-fc/fc2.weight", weight2);
         load_data("../mnist-fc/fc1.bias", bias1);
         load_data("../mnist-fc/fc2.bias", bias2);
     }
+
+public:
+    
+    Model(){
+        load_model();
+        load_weight();
+    }
     
     ~Model(){}
 
-    vector<float> forward(const string& imagePath){
-        vector<vector<float>> input = processImage(imagePath);
-        vector<float> output;
+    vector<T> forward(const string& imagePath){
+        vector<vector<T>> input = processImage<float>(imagePath);
+        vector<T> output;
         auto temp = matrix_multiply(input, weight1);
         temp = matrix_add(temp, bias1);
         temp = relu(temp);
@@ -145,9 +151,9 @@ public:
         const int numImages = 10;
         for (int i = 0; i < numImages; ++i) {
             string imagePath = folderPath + to_string(i) + ".png"; 
-            vector<float> imageData = forward(imagePath);
+            vector<T> imageData = forward(imagePath);
             
-            vector<vector<float>> allImagesData;
+            vector<vector<T>> allImagesData;
     
             if (!imageData.empty()) {
                 allImagesData.push_back(imageData);
