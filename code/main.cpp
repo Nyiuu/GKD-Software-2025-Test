@@ -1,10 +1,8 @@
-#include "model.hpp"
-
-using namespace std;
+#include "ui.hpp"
 
 int main(){
-    Model model;
-    model.process_all();
+    UI ui;
+    ui.ui_task();
     return 0;
 }
 

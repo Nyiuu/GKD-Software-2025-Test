@@ -155,9 +155,9 @@ public:
             }
 
             if (!allImagesData.empty()) {
-                cout << "\n第一张图片的前10个归一化像素值:" << endl;
-                for (int i = 0; i < 10 && i < allImagesData[0].size(); ++i) {
-                    cout << allImagesData[0][i] << " ";
+                cout << "\n第"+ to_string(i + 1) +"张图片的前10个归一化像素值:" << endl;
+                for (int j = 0; j < 10 && j < allImagesData[0].size(); ++j) {
+                    cout << allImagesData[0][j] << " ";
                 }
                 cout << endl;
             }
