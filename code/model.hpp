@@ -3,8 +3,11 @@
 #include <cmath>
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include "readphoto.hpp"
+#include <iostream>
 using namespace std;
 using json = nlohmann::json;
+
 class Model
 {
 private:
@@ -65,20 +68,20 @@ private:
             mother += exp(input[0][j]);
         }
         for(int j = 0; j < s; j++){
-            output[j] = input[0][j] / mother;
+            output[j] = exp(input[0][j]) / mother;
         }
 
         return output;
     }
 
-    vector<vector<float>> init_matrix(const vector<int>& dims) {
+    vector<vector<float>> init_matrix(const vector<int>& dims){
         return vector<vector<float>>(
             dims[0], 
             vector<float>(dims[1], 0.0f)
         );
     }
 
-    void load_model() {
+    void load_model(){
         ifstream file("../mnist-fc/meta.json");
         json data = json::parse(file);
         weight1 = init_matrix(data["fc1.weight"].get<vector<int>>());
@@ -86,15 +89,47 @@ private:
         weight2 = init_matrix(data["fc2.weight"].get<vector<int>>());
         bias2 = init_matrix(data["fc2.bias"].get<vector<int>>());
     }
+
+    void load_data(const string& bin_name, vector<vector<float>>& matrix){
+        int row = matrix.size();
+        int col = matrix[0].size();
+
+        ifstream f(bin_name, ios::binary);
+        if(!f){
+            cerr << "can't open file" << endl;
+            return;
+        }
+        //获取文件大小
+        f.seekg(0, ios::end);
+        auto file_size = f.tellg();
+        f.seekg(0, ios::beg);
+
+        auto count = file_size / sizeof(float);
+
+        vector<float> buffer(count);
+        f.read(reinterpret_cast<char*>(buffer.data()), file_size);
+
+        for (int i = 0; i < row; ++i) {
+            for (int j = 0; j < col; ++j) {
+                matrix[i][j] = buffer[i * col + j];
+            }
+        }
+    }
+
 public:
     
     Model(){
         load_model();
+        load_data("../mnist-fc/fc1.weight", weight1);
+        load_data("../mnist-fc/fc2.weight", weight2);
+        load_data("../mnist-fc/fc1.bias", bias1);
+        load_data("../mnist-fc/fc2.bias", bias2);
     }
     
     ~Model(){}
 
-    vector<float> forward(const vector<vector<float>>& input){
+    vector<float> forward(const string& imagePath){
+        vector<vector<float>> input = processImage(imagePath);
         vector<float> output;
         auto temp = matrix_multiply(input, weight1);
         temp = matrix_add(temp, bias1);
@@ -105,5 +140,27 @@ public:
         return output;
     }
 
+    void process_all(){
+        const string folderPath = "../nums/";
+        const int numImages = 10;
+        for (int i = 0; i < numImages; ++i) {
+            string imagePath = folderPath + to_string(i) + ".png"; 
+            vector<float> imageData = forward(imagePath);
+            
+            vector<vector<float>> allImagesData;
     
+            if (!imageData.empty()) {
+                allImagesData.push_back(imageData);
+                cout << "已处理图像: " << imagePath << " - 数据长度: " << imageData.size() << endl;
+            }
+
+            if (!allImagesData.empty()) {
+                cout << "\n第一张图片的前10个归一化像素值:" << endl;
+                for (int i = 0; i < 10 && i < allImagesData[0].size(); ++i) {
+                    cout << allImagesData[0][i] << " ";
+                }
+                cout << endl;
+            }
+        }
+    }
 };
