@@ -1,16 +1,19 @@
 #pragma once
 #include <vector>
 #include <cmath>
-#include <nlohmann/json.hpp>
-#include <fstream>
-#include "readphoto.hpp"
 #include <iostream>
-using namespace std;
+#include <fstream>
+#include <algorithm>
+#include <opencv2/opencv.hpp>
+#include <nlohmann/json.hpp>
+#include "modelbase.hpp"
 using json = nlohmann::json;
 
+using namespace std;
+using namespace cv;
+
 template<typename T>
-class Model
-{
+class Model : public ModelBase{
 private:
     vector<vector<T>> weight1;
     vector<vector<T>> bias1;
@@ -79,23 +82,14 @@ private:
     vector<vector<T>> init_matrix(const vector<T>& dims){
         return vector<vector<T>>(
             dims[0], 
-            vector<T>(dims[1], 0.0f)
+            vector<T>(dims[1], T(0))
         );
     }
-
-    void load_model(){
-        ifstream file("../mnist-fc/meta.json");
-        json data = json::parse(file);
-        weight1 = init_matrix(data["fc1.weight"].get<vector<T>>());
-        bias1 = init_matrix(data["fc1.bias"].get<vector<T>>());
-        weight2 = init_matrix(data["fc2.weight"].get<vector<T>>());
-        bias2 = init_matrix(data["fc2.bias"].get<vector<T>>());
-    }
-
+    
     void load_data(const string& bin_name, vector<vector<T>>& matrix){
         int row = matrix.size();
         int col = matrix[0].size();
-
+    
         ifstream f(bin_name, ios::binary);
         if(!f){
             cerr << "can't open file" << endl;
@@ -105,37 +99,94 @@ private:
         f.seekg(0, ios::end);
         auto file_size = f.tellg();
         f.seekg(0, ios::beg);
-
+    
         auto count = file_size / sizeof(T);
-
+    
         vector<T> buffer(count);
         f.read(reinterpret_cast<char*>(buffer.data()), file_size);
-
-        for (int i = 0; i < row; ++i) {
-            for (int j = 0; j < col; ++j) {
+    
+        for(int i = 0; i < row; ++i){
+            for(int j = 0; j < col; ++j){
                 matrix[i][j] = buffer[i * col + j];
             }
         }
     }
 
-    void load_weight(){
-        load_data("../mnist-fc/fc1.weight", weight1);
-        load_data("../mnist-fc/fc2.weight", weight2);
-        load_data("../mnist-fc/fc1.bias", bias1);
-        load_data("../mnist-fc/fc2.bias", bias2);
+    vector<vector<T>> processImage(const string& imagePath) {
+        // 1. 以灰度模式读取图像
+        Mat image = imread(imagePath, IMREAD_GRAYSCALE);
+        
+        if (image.empty()) {
+            cerr << "无法加载图像: " << imagePath << endl;
+            return {};
+        }
+    
+        // 2. 缩小图像到28x28像素
+        Mat resizedImage;
+        resize(image, resizedImage, Size(28, 28), 0, 0, INTER_LINEAR);
+    
+        // 3. 将图像拍扁成一维向量
+        Mat flattened = resizedImage.reshape(1, 1); // 1通道，1行
+        if constexpr(is_same_v<T, float>){
+            flattened.convertTo(flattened, CV_32F); 
+        }else if constexpr(is_same_v<T, double>){
+            flattened.convertTo(flattened, CV_64F);  
+        }
+    
+        // 4. 归一化到0-1范围
+        vector<T> normalizedVec;
+        flattened /= 255.0;
+        normalizedVec.assign(flattened.begin<T>(), flattened.end<T>());
+        vector<vector<T>> result;
+        result.push_back(normalizedVec);
+        return result;
     }
+
 
 public:
     
     Model(){
-        load_model();
-        load_weight();
+        
     }
     
     ~Model(){}
 
+    void load_model(const string& choose) override {
+        string folder_path;
+        if(choose == "1"){
+            folder_path = "../mnist-fc/";
+        }else if(choose == "2"){
+            folder_path = "../mnist-fc-plus/";
+        }
+        ifstream file(folder_path + "meta.json");
+        json data = json::parse(file);
+        string type = data["type"];
+        if(type == "fp32"){
+            weight1 = init_matrix(data["fc1.weight"].get<vector<T>>());
+            bias1 = init_matrix(data["fc1.bias"].get<vector<T>>());
+            weight2 = init_matrix(data["fc2.weight"].get<vector<T>>());
+            bias2 = init_matrix(data["fc2.bias"].get<vector<T>>());
+            load_data(folder_path + "fc1.weight", weight1);
+            load_data(folder_path + "fc2.weight", weight2);
+            load_data(folder_path + "fc1.bias", bias1);
+            load_data(folder_path + "fc2.bias", bias2);
+        }else if(type == "fp64"){
+            weight1 = init_matrix(data["fc1.weight"].get<vector<T>>());
+            bias1 = init_matrix(data["fc1.bias"].get<vector<T>>());
+            weight2 = init_matrix(data["fc2.weight"].get<vector<T>>());
+            bias2 = init_matrix(data["fc2.bias"].get<vector<T>>());
+            load_data(folder_path + "fc1.weight", weight1);
+            load_data(folder_path + "fc2.weight", weight2);
+            load_data(folder_path + "fc1.bias", bias1);
+            load_data(folder_path + "fc2.bias", bias2);
+        }else{
+            return;
+        }
+         
+    }
+
     vector<T> forward(const string& imagePath){
-        vector<vector<T>> input = processImage<float>(imagePath);
+        vector<vector<T>> input = processImage(imagePath);
         vector<T> output;
         auto temp = matrix_multiply(input, weight1);
         temp = matrix_add(temp, bias1);
@@ -170,3 +221,11 @@ public:
         }
     }
 };
+
+unique_ptr<ModelBase> create_model(const string& choose){
+    if(choose == "1"){
+        return make_unique<Model<float>>();
+    }else if(choose == "2"){
+        return make_unique<Model<double>>();
+    }
+}

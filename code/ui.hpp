@@ -1,12 +1,13 @@
 #include <thread>
 #include <mutex>
 #include <algorithm>
-#include "model.hpp"
-
+#include <opencv2/opencv.hpp>
+#include "modelbase.hpp"
 
 using namespace cv;
 using namespace std;
 
+template<typename T>
 class UI{
 private:
     Mat g_canvas;
@@ -15,13 +16,14 @@ private:
     mutex g_mutex;
     bool g_drawing;
     Point g_last_point;
-    Model<float> model;
+    unique_ptr<ModelBase> model;
+    string folder_path;
 
     
 public:
-    UI():g_canvas(400, 400, CV_8UC1, Scalar(255)), g_display(450, 650, CV_8UC3, Scalar(255, 255, 255)), 
-    g_probs(10, 0.0f), g_drawing(false){
-        
+    UI(const string& path, unique_ptr<ModelBase> model_ptr):g_canvas(400, 400, CV_8UC1, Scalar(255)), g_display(450, 650, CV_8UC3, Scalar(255, 255, 255)), 
+    g_probs(10, 0.0f), g_drawing(false), folder_path(path), model(move(model_ptr)){
+        model->load_model(folder_path);
     }
 
     ~UI(){
@@ -48,7 +50,7 @@ public:
                     string temp_path = "../temp/temp_digit.png";
                     imwrite(temp_path, canvas_copy);
 
-                    auto result = model.forward(temp_path);
+                    auto result = model->forward(temp_path);
                     
                     //test
                     // auto start = std::chrono::high_resolution_clock::now();
@@ -132,6 +134,7 @@ public:
     }
 
     void ui_task(){
+        
         // 创建窗口
         namedWindow("Digit Recognizer", WINDOW_AUTOSIZE);
         setMouseCallback("Digit Recognizer", &UI::onMouseStatic, this);
@@ -139,6 +142,8 @@ public:
         // 启动识别线程
         thread rec_thread(&recognition_thread_static, this);
         rec_thread.detach();
+
+        test();
 
         // 清空按钮
         Mat button(50, 100, CV_8UC3, Scalar(200, 200, 200));
@@ -189,6 +194,9 @@ public:
         }
     }
 
+    void test(){
+        model->process_all();
+    }
 
 };
 

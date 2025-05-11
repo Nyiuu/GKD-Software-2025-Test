@@ -4,7 +4,7 @@ CXXFLAGS = -std=c++20 -Wall -Wextra
 OPENCV_FLAGS = $(shell pkg-config --cflags --libs opencv4)
 TARGET = main
 
-HEADERS = model.hpp readphoto.hpp ui.hpp
+HEADERS = model.hpp ui.hpp
 
 all: $(TARGET)
 
