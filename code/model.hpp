@@ -156,34 +156,31 @@ public:
     }
 
 
-    vector<vector<T>> parallel_matrix_multiply(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2, unsigned int num_threads = 12){
+    vector<vector<T>> parallel_matrix_multiply(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2, unsigned int num_threads = 5){
         int row = matrix1.size();
         int col = matrix2[0].size();
         int w = matrix2.size();
 
         vector<vector<T>> result(row, vector<T>(col));
 
-        int rows_per_thread = (row + num_threads - 1) / num_threads;
-
+        int cols_per_thread = (col + num_threads - 1) / num_threads;
+       
         vector<thread> threads;
         threads.reserve(num_threads);//reserve不创建具体对象
 
         //用lambda匿名函数便于直接使用函数内创建的变量
         auto worker = [&](int thread_id){
-            int start_row = thread_id * rows_per_thread;
-            // int end_row = (thread_id + 1) * rows_per_thread > row ? row : (thread_id + 1) * rows_per_thread;
-            int end_row = min((thread_id + 1) * rows_per_thread, row);
-            for(int i = start_row; i < end_row; i++){
-                for(int j = 0; j < col; j++){
-                    T sum = 0;
-                    for(int k = 0; k < w; k++){
-                        sum += matrix1[i][k] * matrix2[k][j];
-                    }
-                   result[i][j]= sum;
+            int start_col = thread_id * cols_per_thread;
+            int end_col = std::min((thread_id + 1) * cols_per_thread, col);
+            for(int j = start_col; j < end_col; j++){
+                T sum = 0;
+                for(int k = 0; k < w; k++){
+                    sum += matrix1[0][k] * matrix2[k][j];
                 }
+                result[0][j] = sum;
             }
-    
         };
+    
 
         for(unsigned int i = 0; i < num_threads; i++){
             threads.emplace_back(worker, i);
@@ -234,13 +231,23 @@ public:
     vector<T> forward(const string& imagePath){
         vector<vector<T>> input = processImage(imagePath);
         vector<T> output;
-        auto temp = matrix_multiply(input, weight1);
+        auto temp = parallel_matrix_multiply(input, weight1, 5);
         temp = matrix_add(temp, bias1);
         temp = relu(temp);
-        temp = matrix_multiply(temp, weight2);
+        temp = parallel_matrix_multiply(temp, weight2);
         temp = matrix_add(temp, bias2);
         output = softMax(temp);
         return output;
+
+        // vector<vector<T>> input = processImage(imagePath);
+        // vector<T> output;
+        // auto temp = matrix_multiply(input, weight1);
+        // temp = matrix_add(temp, bias1);
+        // temp = relu(temp);
+        // temp = matrix_multiply(temp, weight2);
+        // temp = matrix_add(temp, bias2);
+        // output = softMax(temp);
+        // return output;
     }
 
 
