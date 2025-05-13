@@ -7,8 +7,10 @@
 #include <opencv2/opencv.hpp>
 #include <nlohmann/json.hpp>
 #include "modelbase.hpp"
-using json = nlohmann::json;
+#include <thread>
+#include <mutex>
 
+using json = nlohmann::json;
 using namespace std;
 using namespace cv;
 
@@ -19,26 +21,6 @@ private:
     vector<vector<T>> bias1;
     vector<vector<T>> weight2;
     vector<vector<T>> bias2;
-
-    vector<vector<T>> matrix_multiply(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2){
-        int row = matrix1.size();
-        int col = matrix2[0].size();
-        int w = matrix2.size();
-
-        vector<vector<T>> result(row, vector<T>(col));
-
-        for(int i = 0; i < row; i++){
-            for(int j = 0; j < col; j++){
-                T sum = 0;
-                for(int k = 0; k < w; k++){
-                    sum += matrix1[i][k] * matrix2[k][j];
-                }
-               result[i][j]= sum;
-            }
-        }
-
-        return result;
-    }
 
     vector<vector<T>> matrix_add(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2){
         vector<vector<T>> result(matrix1.size(), vector<T>(matrix1[0].size()));
@@ -142,6 +124,8 @@ private:
         return result;
     }
 
+    
+
 
 public:
     
@@ -150,6 +134,68 @@ public:
     }
     
     ~Model(){}
+
+    vector<vector<T>> matrix_multiply(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2){
+        int row = matrix1.size();
+        int col = matrix2[0].size();
+        int w = matrix2.size();
+
+        vector<vector<T>> result(row, vector<T>(col));
+
+        for(int i = 0; i < row; i++){
+            for(int j = 0; j < col; j++){
+                T sum = 0;
+                for(int k = 0; k < w; k++){
+                    sum += matrix1[i][k] * matrix2[k][j];
+                }
+               result[i][j]= sum;
+            }
+        }
+
+        return result;
+    }
+
+
+    vector<vector<T>> parallel_matrix_multiply(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2, unsigned int num_threads = 12){
+        int row = matrix1.size();
+        int col = matrix2[0].size();
+        int w = matrix2.size();
+
+        vector<vector<T>> result(row, vector<T>(col));
+
+        int rows_per_thread = (row + num_threads - 1) / num_threads;
+
+        vector<thread> threads;
+        threads.reserve(num_threads);//reserve不创建具体对象
+
+        //用lambda匿名函数便于直接使用函数内创建的变量
+        auto worker = [&](int thread_id){
+            int start_row = thread_id * rows_per_thread;
+            // int end_row = (thread_id + 1) * rows_per_thread > row ? row : (thread_id + 1) * rows_per_thread;
+            int end_row = min((thread_id + 1) * rows_per_thread, row);
+            for(int i = start_row; i < end_row; i++){
+                for(int j = 0; j < col; j++){
+                    T sum = 0;
+                    for(int k = 0; k < w; k++){
+                        sum += matrix1[i][k] * matrix2[k][j];
+                    }
+                   result[i][j]= sum;
+                }
+            }
+    
+        };
+
+        for(unsigned int i = 0; i < num_threads; i++){
+            threads.emplace_back(worker, i);
+        }
+
+        for(auto& thread : threads){
+            thread.join();
+        }
+
+        return result;
+
+    }
 
     void load_model(const string& choose) override {
         string folder_path;
@@ -197,13 +243,25 @@ public:
         return output;
     }
 
+
+
+
     void process_all(){
         const string folderPath = "../nums/";
         const int numImages = 10;
         for (int i = 0; i < numImages; ++i) {
             string imagePath = folderPath + to_string(i) + ".png"; 
-            vector<T> imageData = forward(imagePath);
+
+            // vector<T> imageData = forward(imagePath);
             
+            //test
+            auto start = std::chrono::high_resolution_clock::now();
+            vector<T> imageData = forward(imagePath);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+            std::cout << "函数执行耗时: " << duration_ns.count() << " 纳秒" << std::endl;
+            //test
+
             vector<vector<T>> allImagesData;
     
             if (!imageData.empty()) {
