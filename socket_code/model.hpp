@@ -4,7 +4,6 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
-#include <opencv2/opencv.hpp>
 #include <nlohmann/json.hpp>
 #include "modelbase.hpp"
 #include <thread>
@@ -12,7 +11,7 @@
 
 using json = nlohmann::json;
 using namespace std;
-using namespace cv;
+
 
 template<typename T>
 class Matrix{
@@ -234,16 +233,7 @@ public:
         ifstream file(folder_path + "meta.json");
         json data = json::parse(file);
         string type = data["type"];
-        if(type == "fp32"){
-            weight1.init_matrix(data["fc1.weight"].get<vector<T>>());
-            bias1.init_matrix(data["fc1.bias"].get<vector<T>>());
-            weight2.init_matrix(data["fc2.weight"].get<vector<T>>());
-            bias2.init_matrix(data["fc2.bias"].get<vector<T>>());
-            weight1.load_data(folder_path + "fc1.weight");
-            weight2.load_data(folder_path + "fc2.weight");
-            bias1.load_data(folder_path + "fc1.bias");
-            bias2.load_data(folder_path + "fc2.bias");
-        }else if(type == "fp64"){
+        if(type == "fp32" || type == "fp64"){
             weight1.init_matrix(data["fc1.weight"].get<vector<T>>());
             bias1.init_matrix(data["fc1.bias"].get<vector<T>>());
             weight2.init_matrix(data["fc2.weight"].get<vector<T>>());
