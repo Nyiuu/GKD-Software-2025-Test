@@ -1,37 +1,40 @@
 //服务器端
-#include <iostream>
 #include <fstream>
 #include <sstream>
-#include <string>
-#include <vector>
 #include <map>
 #include <mutex>
 #include <thread>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include "model.hpp"
 
 using namespace std;
 
 mutex cout_mutex;
 
 void handleClient(int clientSocket) {
-    char buffer[1024] = {0};
+    char buffer[65536] = {0};
     int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
 
     if (bytesRead <= 0) {
         close(clientSocket);
         return;
     }
-    {
-        lock_guard<mutex> lock(cout_mutex);
-        cout << buffer << endl;
-    }
-    bool success = 1;
+
+    buffer[bytesRead] = '\0';
+
+    stringstream ss(buffer);
+
+    string choose;
+    getline(ss, choose);
+    auto model_ptr = create_model(choose);
+    model_ptr->load_model(choose);
+    model_ptr->process_all(ss);
     
-    string response = success ? "1" : "-1";
+    string response = "1";
     send(clientSocket, response.c_str(), response.size(), 0);
-    //生成日志
+
     close(clientSocket);
 }
 
