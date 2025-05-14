@@ -15,63 +15,127 @@ using namespace std;
 using namespace cv;
 
 template<typename T>
-class Model : public ModelBase{
+class Matrix{
 private:
-    vector<vector<T>> weight1;
-    vector<vector<T>> bias1;
-    vector<vector<T>> weight2;
-    vector<vector<T>> bias2;
+    vector<vector<T>> data;
+    size_t rows;
+    size_t cols;
+public:
+    Matrix() : rows(0), cols(0){}
+    Matrix(size_t r, size_t c, T v = T()) : data(r, vector<T>(c, v)), rows(r), cols(c){}
 
-    vector<vector<T>> matrix_add(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2){
-        vector<vector<T>> result(matrix1.size(), vector<T>(matrix1[0].size()));
-        
-        for(size_t i = 0; i < matrix1.size(); i++){
-            for(size_t j = 0; j < matrix1[0].size(); j++){
-                result[i][j] = matrix1[i][j] + matrix2[i][j];
+    size_t get_rows() const{
+        return rows;
+    }
+
+    size_t get_cols() const{
+        return cols;
+    }
+
+    void clear(){
+        data.clear();
+        rows = 0;
+        cols = 0;
+        data.resize(0);
+    }
+   
+    vector<T>& operator[](size_t i){
+        return data[i];
+    }
+    const vector<T>& operator[](size_t i) const {
+        return data[i];
+    }
+
+    Matrix<T> operator+(const Matrix& other) const {
+        // if (rows != other.rows || cols != other.cols) {
+        //     throw invalid_argument("不能加");
+        // }
+        Matrix result(rows, cols);
+        for(size_t i = 0; i < rows; ++i){
+            for (size_t j = 0; j < cols; ++j) {
+                result[i][j] = data[i][j] + other[i][j];
             }
         }
-
         return result;
     }
 
-    vector<vector<T>> relu(const vector<vector<T>>& input){
-        vector<vector<T>> output(input.size(), vector<T>(input[0].size()));
-       
-        for(size_t i = 0; i < input.size(); i++){
-            for(size_t j = 0; j < input[0].size(); j++){
-                output[i][j] = input[i][j] < 0? 0 : input[i][j];
+    Matrix<T> operator*(const Matrix& other) const {
+        size_t num_threads = 5;
+        size_t row = rows;
+        size_t col = other.cols;
+        size_t w = other.rows;
+        
+        // if (cols != w) {
+        //     throw invalid_argument("不能乘");
+        // }
+
+        Matrix result(row, col);
+
+        size_t cols_per_thread = (col + num_threads - 1) / num_threads;
+        
+        vector<thread> threads;
+        threads.reserve(num_threads);
+
+        auto worker = [&](size_t thread_id){
+            size_t start_col = thread_id * cols_per_thread;
+            size_t end_col = min((thread_id + 1) * cols_per_thread, col);
+            for(size_t j = start_col; j < end_col; j++){              
+                for(size_t i = 0; i < row; i++){
+                    for(size_t k = 0; k < w; k++){
+                        result[i][j] += data[i][k] * other[k][j];
+                    }
+                }      
+            }
+        };
+    
+
+        for(size_t i = 0; i < num_threads; i++){
+            threads.emplace_back(worker, i);
+        }
+
+        for(auto& thread : threads){
+            thread.join();
+        }
+
+        return result;
+
+
+    }
+    Matrix<T> relu() const {
+        Matrix result(rows, cols);
+        for(size_t i = 0; i < rows; ++i){
+            for(size_t j = 0; j < cols; ++j){
+                result[i][j] = data[i][j] < 0 ? T(0) : data[i][j];
             }
         }
-
-        return output;
+        return result;
     }
-
     
-    vector<T> softMax(const vector<vector<T>>& input){
-        int s = input[0].size();
-        vector<T> output(s);
+    vector<T> softmax() const {
+        // if(rows != 1){
+        //     throw invalid_argument("只针对行向量");
+        // }
+        
+        vector<T> output(cols);
         T mother = 0;
-        for(int j = 0; j < s; j++){
-            mother += exp(input[0][j]);
+        for(size_t j = 0; j < cols; j++){
+            mother += exp(data[0][j]);
         }
-        for(int j = 0; j < s; j++){
-            output[j] = exp(input[0][j]) / mother;
+        for(size_t j = 0; j < cols; j++){
+            output[j] = exp(data[0][j]) / mother;
         }
 
         return output;
+        
     }
 
-    vector<vector<T>> init_matrix(const vector<T>& dims){
-        return vector<vector<T>>(
-            dims[0], 
-            vector<T>(dims[1], T(0))
-        );
+    void init_matrix(const vector<T>& dims){
+       rows = static_cast<size_t>(dims[0]);
+       cols = static_cast<size_t>(dims[1]);    
+       data.resize(rows, vector<T>(cols, T(0)));
     }
-    
-    void load_data(const string& bin_name, vector<vector<T>>& matrix){
-        int row = matrix.size();
-        int col = matrix[0].size();
-    
+
+    void load_data(const string& bin_name){    
         ifstream f(bin_name, ios::binary);
         if(!f){
             cerr << "can't open file" << endl;
@@ -87,52 +151,59 @@ private:
         vector<T> buffer(count);
         f.read(reinterpret_cast<char*>(buffer.data()), file_size);
     
-        for(int i = 0; i < row; ++i){
-            for(int j = 0; j < col; ++j){
-                matrix[i][j] = buffer[i * col + j];
+        for(size_t i = 0; i < rows; ++i){
+            for(size_t j = 0; j < cols; ++j){
+                data[i][j] = buffer[i * cols + j];
             }
         }
     }
 
-    bool read_matrix(stringstream& buffer_stream, vector<vector<T>>& matrix) {
-        matrix.clear();
+    bool read_matrix(stringstream& buffer_stream) {
+        clear();
         string line;
+        size_t maxCols = 0; 
         
-        while(getline(buffer_stream, line) && !line.empty()){
+        while(getline(buffer_stream, line)){
+            if(line == "E"){
+                break;
+            }
+
+            if(line.empty()){
+                continue;
+            }
+
             istringstream line_stream(line);
             vector<T> row;
-            T value;
+            T value;    
             
             while (line_stream >> value) {
                 row.push_back(value);
             }
             
             if (!row.empty()) {
-                matrix.push_back(row);
+                data.push_back(row);
+                maxCols = max(maxCols, row.size()); 
             }
         }
-        
-        bool has_data = !matrix.empty();
 
-        string end_mark;
-        if (has_data && buffer_stream >> end_mark) {
-            buffer_stream.ignore();
-        }
-        return has_data;
+        rows = data.size();
+        cols = maxCols;
+
+        return !data.empty();
     }
 
-    vector<vector<vector<T>>> read_all(stringstream& buffer_stream) {
-        vector<vector<vector<T>>> matrices;
-        vector<vector<T>> matrix;
-        
-        // 循环读取所有矩阵，直到文件结束
-        while (read_matrix(buffer_stream, matrix)) {
-            matrices.push_back(matrix);
-        }
-        
-        return matrices;
-    }
+    
+};
 
+
+
+template<typename T>
+class Model : public ModelBase{
+private:
+    Matrix<T> weight1;
+    Matrix<T> bias1;
+    Matrix<T> weight2;
+    Matrix<T> bias2;
 
 public:
     
@@ -142,63 +213,15 @@ public:
     
     ~Model(){}
 
-    vector<vector<T>> matrix_multiply(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2){
-        int row = matrix1.size();
-        int col = matrix2[0].size();
-        int w = matrix2.size();
-
-        vector<vector<T>> result(row, vector<T>(col));
-
-        for(int i = 0; i < row; i++){
-            for(int j = 0; j < col; j++){
-                T sum = 0;
-                for(int k = 0; k < w; k++){
-                    sum += matrix1[i][k] * matrix2[k][j];
-                }
-               result[i][j]= sum;
-            }
+    vector<Matrix<T>> read_all(stringstream& buffer_stream) {
+        vector<Matrix<T>> matrices;
+        Matrix<T> matrix;
+        
+        while(matrix.read_matrix(buffer_stream)){
+            matrices.push_back(matrix);
         }
-
-        return result;
-    }
-
-
-    vector<vector<T>> parallel_matrix_multiply(const vector<vector<T>>& matrix1, const vector<vector<T>>& matrix2, unsigned int num_threads = 5){
-        int row = matrix1.size();
-        int col = matrix2[0].size();
-        int w = matrix2.size();
-
-        vector<vector<T>> result(row, vector<T>(col));
-
-        int cols_per_thread = (col + num_threads - 1) / num_threads;
-       
-        vector<thread> threads;
-        threads.reserve(num_threads);//reserve不创建具体对象
-
-        //用lambda匿名函数便于直接使用函数内创建的变量
-        auto worker = [&](int thread_id){
-            int start_col = thread_id * cols_per_thread;
-            int end_col = std::min((thread_id + 1) * cols_per_thread, col);
-            for(int j = start_col; j < end_col; j++){
-                T sum = 0;
-                for(int k = 0; k < w; k++){
-                    sum += matrix1[0][k] * matrix2[k][j];
-                }
-                result[0][j] = sum;
-            }
-        };
-    
-
-        for(unsigned int i = 0; i < num_threads; i++){
-            threads.emplace_back(worker, i);
-        }
-
-        for(auto& thread : threads){
-            thread.join();
-        }
-
-        return result;
-
+        
+        return matrices;
     }
 
     void load_model(const string& choose) override {
@@ -212,61 +235,50 @@ public:
         json data = json::parse(file);
         string type = data["type"];
         if(type == "fp32"){
-            weight1 = init_matrix(data["fc1.weight"].get<vector<T>>());
-            bias1 = init_matrix(data["fc1.bias"].get<vector<T>>());
-            weight2 = init_matrix(data["fc2.weight"].get<vector<T>>());
-            bias2 = init_matrix(data["fc2.bias"].get<vector<T>>());
-            load_data(folder_path + "fc1.weight", weight1);
-            load_data(folder_path + "fc2.weight", weight2);
-            load_data(folder_path + "fc1.bias", bias1);
-            load_data(folder_path + "fc2.bias", bias2);
+            weight1.init_matrix(data["fc1.weight"].get<vector<T>>());
+            bias1.init_matrix(data["fc1.bias"].get<vector<T>>());
+            weight2.init_matrix(data["fc2.weight"].get<vector<T>>());
+            bias2.init_matrix(data["fc2.bias"].get<vector<T>>());
+            weight1.load_data(folder_path + "fc1.weight");
+            weight2.load_data(folder_path + "fc2.weight");
+            bias1.load_data(folder_path + "fc1.bias");
+            bias2.load_data(folder_path + "fc2.bias");
         }else if(type == "fp64"){
-            weight1 = init_matrix(data["fc1.weight"].get<vector<T>>());
-            bias1 = init_matrix(data["fc1.bias"].get<vector<T>>());
-            weight2 = init_matrix(data["fc2.weight"].get<vector<T>>());
-            bias2 = init_matrix(data["fc2.bias"].get<vector<T>>());
-            load_data(folder_path + "fc1.weight", weight1);
-            load_data(folder_path + "fc2.weight", weight2);
-            load_data(folder_path + "fc1.bias", bias1);
-            load_data(folder_path + "fc2.bias", bias2);
+            weight1.init_matrix(data["fc1.weight"].get<vector<T>>());
+            bias1.init_matrix(data["fc1.bias"].get<vector<T>>());
+            weight2.init_matrix(data["fc2.weight"].get<vector<T>>());
+            bias2.init_matrix(data["fc2.bias"].get<vector<T>>());
+            weight1.load_data(folder_path + "fc1.weight");
+            weight2.load_data(folder_path + "fc2.weight");
+            bias1.load_data(folder_path + "fc1.bias");
+            bias2.load_data(folder_path + "fc2.bias");
         }else{
             return;
         }
-         
     }
 
-    vector<T> forward(vector<vector<T>>& input){
-        vector<T> output;
-        auto temp = parallel_matrix_multiply(input, weight1, 5);
-        temp = matrix_add(temp, bias1);
-        temp = relu(temp);
-        temp = parallel_matrix_multiply(temp, weight2);
-        temp = matrix_add(temp, bias2);
-        output = softMax(temp);
+    vector<T> forward(Matrix<T>& input){
+        auto temp = input * weight1;
+        temp = temp.relu();
+        temp = temp * weight2;
+        temp = temp + bias2;
+        auto output = temp.softmax();
         return output;
-
-        // vector<vector<T>> input = processImage(imagePath);
-        // vector<T> output;
-        // auto temp = matrix_multiply(input, weight1);
-        // temp = matrix_add(temp, bias1);
-        // temp = relu(temp);
-        // temp = matrix_multiply(temp, weight2);
-        // temp = matrix_add(temp, bias2);
-        // output = softMax(temp);
-        // return output;
     }
 
 
-    void process_all(stringstream& buffer_stream) override{
+    string process_all(stringstream& buffer_stream) override{
+        string result;
         auto all_image_data = read_all(buffer_stream);
         for(size_t i = 0; i < all_image_data.size(); i++){
             auto image_data = forward(all_image_data[i]);
-            cout << "\n第"+ to_string(i + 1) +"张图片的前10个归一化像素值:" << endl;
+            result += "\n第" + to_string(i + 1) + "张图片的前10个归一化像素值:\n";
             for (size_t j = 0; j < 10 && j < image_data.size(); ++j) {
-                cout << image_data[j] << " ";
+                result += to_string(image_data[j]) + " ";
             }
-            cout << endl;
+            result += "\n";
         }
+        return result;
     }
 };
 

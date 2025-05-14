@@ -109,7 +109,7 @@ void socket_task(const string&choose){
     s_stream << choose + "\n";
     load_all<T>(s_stream);
     string str = s_stream.str();
-    cout << str << endl;
+
     // 发送
     if (send(sock, str.c_str(), str.size(), 0) < 0) {
         lock_guard<mutex> lock(coutMutex);
@@ -120,14 +120,14 @@ void socket_task(const string&choose){
     }
 
     // 接收响应
-    char buffer[1024] = {0};
+    char buffer[10240] = {0};
     int bytesReceived = recv(sock, buffer, sizeof(buffer), 0);
     {
         lock_guard<mutex> lock(coutMutex);
         if (bytesReceived <= 0) {
             cerr << "未收到服务器响应" << endl;
         } else {
-           cout << "OK" << endl; 
+           cout << buffer << endl;
         }
     }
 

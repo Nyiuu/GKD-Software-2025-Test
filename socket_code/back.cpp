@@ -30,9 +30,9 @@ void handleClient(int clientSocket) {
     getline(ss, choose);
     auto model_ptr = create_model(choose);
     model_ptr->load_model(choose);
-    model_ptr->process_all(ss);
+
+    auto response = model_ptr->process_all(ss);
     
-    string response = "1";
     send(clientSocket, response.c_str(), response.size(), 0);
 
     close(clientSocket);
